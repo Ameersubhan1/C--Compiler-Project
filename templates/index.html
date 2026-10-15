@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>🔥 Mini Compiler IDE</title>
+
+<style>
+body {
+    margin: 0;
+    background: #0a0f1c;
+    color: #e5e7eb;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* ===== HEADER PREMIUM ===== */
+.header {
+    padding: 14px 20px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* TITLE */
+.header .title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f8fafc;
+    letter-spacing: 0.5px;
+}
+
+.header .title span {
+    color: #22c55e;
+}
+
+/* BUTTON GROUP */
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* BUTTONS */
+button {
+    padding: 9px 14px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease-in-out;
+}
+
+/* RUN BUTTON */
+.run-btn {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+}
+
+.run-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+}
+
+/* DOWNLOAD BUTTON */
+.download-btn {
+    background: #1f2937;
+    color: #e5e7eb;
+    border: 1px solid #374151;
+}
+
+.download-btn:hover {
+    background: #111827;
+}
+
+/* LAYOUT */
+.container {
+    display: flex;
+    height: 92vh;
+}
+
+/* EDITOR */
+#editor {
+    width: 70%;
+    height: 100%;
+}
+
+/* OUTPUT PANEL */
+.output {
+    width: 30%;
+    background: #0b1220;
+    padding: 15px;
+    overflow: auto;
+    border-left: 1px solid #1f2937;
+}
+
+/* OUTPUT CARD */
+.section {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+}
+
+.section-title {
+    color: #22c55e;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 13px;
+    letter-spacing: 0.4px;
+}
+
+pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 13px;
+    color: #cbd5e1;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+
+</head>
+
+<body>
+
+<div class="header">
+    <div class="title">
+        ⚙️ <span>Compiler Construction & Intermediate Code Generator</span> 
+    </div>
+
+    <div class="button-group">
+        <button class="run-btn" onclick="runCode()">▶ Run</button>
+        <button class="download-btn" onclick="downloadReport()">⬇ Download</button>
+    </div>
+</div>
+
+<div class="container">
+    <div id="editor"></div>
+    <div class="output" id="output">Output will appear here...</div>
+</div>
+
+<script>
+let lastCompilationResult = null;
+let editor;
+
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' }});
+
+require(["vs/editor/editor.main"], function () {
+    editor = monaco.editor.create(document.getElementById('editor'), {
+        value: `int $x$;
+$x$ := 5 + 3 * 2;`,
+        language: "plaintext",
+        theme: "vs-dark",
+        fontSize: 16
+    });
+});
+
+function downloadReport() {
+
+    // ❌ if no compilation done
+    if (!lastCompilationResult) {
+        alert("⚠ Please run the compiler first!");
+        return;
+    }
+
+    let data = lastCompilationResult;
+
+    let text = "";
+
+    text += "================ TOKENS ================\n";
+    text += JSON.stringify(data.tokens, null, 2) + "\n\n";
+
+    text += "================ AST ================\n";
+    text += data.ast + "\n\n";
+
+    text += "============= SYMBOL TABLE =============\n";
+    text += JSON.stringify(data.symbol_table, null, 2) + "\n\n";
+
+    text += "============= QUADRUPLES =============\n";
+
+    data.quadruples.forEach(q => {
+        text += `(${q[0]}, ${q[1]}, ${q[2]}, ${q[3]})\n`;
+    });
+
+    const blob = new Blob([text], { type: "text/plain" });
+    const a = document.createElement("a");
+
+    a.href = URL.createObjectURL(blob);
+    a.download = "compiler_report.txt";
+    a.click();
+}
+function runCode() {
+    const code = editor.getValue();
+
+    fetch('/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code })
+    })
+    .then(res => res.json())
+.then(data => {
+
+    let box = document.getElementById("output");
+
+    if (data.status === "error") {
+        box.innerHTML = `
+        <div style="color:#ff4d4d;font-weight:bold">
+        ❌ COMPILATION ERROR<br><br>
+        ${data.error}
+        </div>`;
+
+        lastCompilationResult = null; // ❌ reset
+        return;
+    }
+
+    // ✅ STORE REAL RESULT
+    lastCompilationResult = data;
+
+    let html = "";
+
+    function section(title, content) {
+        return `
+        <div style="margin-bottom:15px;padding:10px;background:#0b1220;border:1px solid #1e293b;border-radius:8px">
+            <div style="color:#22c55e;font-weight:bold;margin-bottom:5px">${title}</div>
+            <pre style="white-space:pre-wrap">${content}</pre>
+        </div>`;
+    }
+
+    html += section("TOKENS (LEXICAL ANALYSIS)", JSON.stringify(data.tokens, null, 2));
+    html += section("AST (SYNTAX TREE)", data.ast);
+    html += section("SYMBOL TABLE (SEMANTIC)", JSON.stringify(data.symbol_table, null, 2));
+
+    let quad = "";
+    data.quadruples.forEach(q => {
+        quad += `(${q[0]}, ${q[1]}, ${q[2]}, ${q[3]})\n`;
+    });
+
+    html += section("QUADRUPLES (INTERMEDIATE CODE)", quad);
+
+    box.innerHTML = html;
+});
+}
+</script>
+
+</body>
+</html>
